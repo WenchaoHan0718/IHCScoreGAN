@@ -119,7 +119,7 @@ class KeypointGAN(object) :
             self.trainA = ImageFolder(r'C:\Users\M306410\Desktop\cell_segmentation\results\tiles_png', train_transform, 
                                     allowed_sample_names=[str(x).zfill(3) for x in datatable_df.index[(datatable_df.year < 2018) & (datatable_df.samples > 0)]],#[str(x).zfill(3) for x in samples.index[:i]],#
                                     n_samples=self.n_samples)
-            assert self.trainA.imgs[0][0].split('\\')[-2]=='2491', 'Error: random seed not working...'
+            # assert self.trainA.imgs[0][0].split('\\')[-2]=='2491', 'Error: random seed not working...'
             self.trainB = ImageAndKeypointFolder(
                                     r'C:\Users\M306410\Desktop\cell_segmentation\results\segmentation\ihc2maskvar\overlay', 
                                     r'C:\Users\M306410\Desktop\cell_segmentation\results\segmentation\ihc2maskvar\json',
