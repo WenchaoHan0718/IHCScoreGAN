@@ -9,8 +9,8 @@ import pandas as pd
 
 from preprocessing import slide, tiles, mask, filter, util
 from scripts.result_quantification import quantify
-from input.get_from_store import *
-from run_infer import *
+from get_from_store import *
+from run_infer_hovernet import *
 
 json_base = './results/segmentation/ihcseg/'
 log_path = './results/logs/'
