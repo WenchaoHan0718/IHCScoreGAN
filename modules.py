@@ -3,9 +3,9 @@ import torch.nn as nn
 import functools
 
 class KeypointGenerator(nn.Module):
-    ''' Defines a UNet-based generator. '''
+    ''' Defines a UNet-based, dual-branch generator as described in our related paper. '''
 
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d):
         '''
         Init function.
 
@@ -83,6 +83,60 @@ class KeypointGenerator(nn.Module):
 
         return out_dict
 
+class UnetGenerator(nn.Module):
+    ''' Defines a standard UNet-based generator. '''
+
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d):
+        '''
+        Init function.
+
+        Parameters:
+            input_nc (int):  The number of input image channels.
+            output_nc (int): The number of output channels.
+            num_downs (int): The number of down-sampling layers in the UNet.
+            ngf (int):       The base feature space of the network.
+            norm_layer:      The type of normalization layer to use.
+        '''
+
+        super(UnetGenerator, self).__init__()
+
+        n_residual_blocks = 8
+
+        self.input = UnetDownBlock(output_nc, ngf, input_nc=input_nc, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+        self.down1 = UnetDownBlock(ngf, ngf * 2, input_nc=None, norm_layer=norm_layer)
+        self.down2 = UnetDownBlock(ngf * 2, ngf * 4, input_nc=None, norm_layer=norm_layer)
+        self.down3 = UnetDownBlock(ngf * 4, ngf * 8, input_nc=None, norm_layer=norm_layer)
+
+        res_ext_encoder = []
+        for _ in range(n_residual_blocks // 2):
+            res_ext_encoder += [ResidualBlock(ngf * 8)]
+        self.ext_f1 = nn.Sequential(*res_ext_encoder)
+
+        res_ext_decoder = []
+        for _ in range(n_residual_blocks // 2):
+            res_ext_decoder += [ResidualBlock(ngf * 8)]
+        self.ext_f2 = nn.Sequential(*res_ext_decoder)
+
+        self.up1 = UnetUpBlock(ngf * 4, ngf * 8, input_nc=None, norm_layer=norm_layer)
+        self.up2 = UnetUpBlock(ngf * 2, ngf * 4, input_nc=None, norm_layer=norm_layer)
+        self.up3 = UnetUpBlock(ngf, ngf * 2, input_nc=None, norm_layer=norm_layer)
+        self.output = UnetUpBlock(output_nc, ngf, input_nc=input_nc, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+
+    def forward(self, input):
+        x0 = self.input(input)
+        x1 = self.down1(x0)
+        x2 = self.down2(x1)
+        x3 = self.down3(x2)
+
+        features = self.ext_f1(x3)
+
+        x = self.ext_f2(features)
+        x = self.up1(torch.cat((x, x3), 1))
+        x = self.up2(torch.cat((x, x2), 1))
+        x = self.up3(torch.cat((x, x1), 1))
+        outputs = self.output(torch.cat((x, x0), 1)).tanh()
+
+        return outputs
 
 class UnetDownBlock(nn.Module):
     ''' Defines a UNet down-sampling block with skip connections. '''
