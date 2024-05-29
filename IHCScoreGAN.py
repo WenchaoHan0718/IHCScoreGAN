@@ -2,21 +2,17 @@ import time, itertools
 from dataset import *
 from torchvision import transforms
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
-from modules import *
 from glob import glob
 from tqdm import tqdm
 from pathlib import Path
-
-import pandas as pd
-
 import scipy.ndimage.filters as filters
 
-def denorm(x): return x * 0.5 + 0.5
-def tensor2numpy(x): return x.detach().cpu().numpy().transpose(1,2,0)
-def RGB2BGR(x): return cv2.cvtColor(x, cv2.COLOR_RGB2BGR)
+from modules import *
+from utils import denorm, tensor2numpy, RGB2BGR
 
 class IHCScoreGAN(object):
+    ''' Defines the model class, where the train and test loop resides. '''
+
     def __init__(self, args):
         self.model_name = 'IHCScoreGAN'
         self.exp_name = args.exp_name
@@ -24,13 +20,12 @@ class IHCScoreGAN(object):
 
         self.result_dir = Path(args.result_dir)
         self.input_dir = Path(args.input_dir)
-        self.resume_path = args.resume_path
+        self.load_path = args.load_path
         self.trainA_dir = self.input_dir / 'trainA'
         self.trainB_dir = self.input_dir / 'trainB'
         self.testA_dir = self.input_dir / 'testA'
-        self.testB_dir = self.input_dir / 'testB'
-        assert all([query in os.listdir(self.input_dir) for query in ['trainA', 'testA', 'trainB', 'testB']]), \
-            'Input directory must contain the following directories with input images: "trainA", "trainB", "testA" and "testB".'
+        assert all([query in os.listdir(self.input_dir) for query in ['trainA', 'testA', 'trainB']]), \
+            'Input directory must contain the following directories with necessary images: "trainA", "trainB", and "testA".'
 
         self.iteration = args.iteration
 
@@ -46,7 +41,6 @@ class IHCScoreGAN(object):
 
         self.neighborhood_size = args.neighborhood_size
         self.kp_threshold = args.kp_threshold
-        self.load_iteration = args.load_iteration
 
         self.adv_weight = args.adv_weight
         self.cycle_weight = args.cycle_weight
@@ -65,7 +59,8 @@ class IHCScoreGAN(object):
         print(args)
 
     def build_model(self):
-        """ DataLoader """
+        """ Dataset and DataLoader initialization. """
+
         trainA_transform = trainB_transform = testA_transform = testB_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
@@ -86,34 +81,38 @@ class IHCScoreGAN(object):
             # self.testB_loader  = DataLoader(self.testB_dataset, batch_size=self.batch_size, shuffle=False)
             print(f'testA_dataset: {len(self.testA_dataset)} samples.')
 
-        """ Define Generator, Discriminator """
+       # Generator and Discriminator initialization.
         self.genA2B = KeypointGenerator(input_nc=3, output_nc=3, ngf=self.ch, norm_layer=self.norm).to(self.device)
         self.genB2A = UnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, norm_layer=self.norm).to(self.device)
         self.disGA  = NLayerDiscriminator(input_nc=3, ndf=self.ch, n_layers=3, norm_layer=self.norm).to(self.device)
         self.disGK  = NLayerDiscriminator(input_nc=3, ndf=self.ch, n_layers=3, norm_layer=self.norm).to(self.device)
         self.disGB  = NLayerDiscriminator(input_nc=3, ndf=self.ch, n_layers=3, norm_layer=self.norm).to(self.device)
 
-        """ Define Loss """
+        # Loss function initialization.
         self.L1_loss  = nn.L1Loss().to(self.device)
         self.MSE_loss = nn.MSELoss().to(self.device)
         self.BCE_loss = nn.BCEWithLogitsLoss().to(self.device)
         self.CE_loss  = nn.CrossEntropyLoss().to(self.device)
 
-        """ Trainer """
+        # Model optimizer initialization.
         self.G_optim = torch.optim.Adam(itertools.chain(self.genA2B.parameters(), self.genB2A.parameters()), lr=self.lr, betas=(0.5, 0.999))
         self.D_optim = torch.optim.Adam(itertools.chain(self.disGA.parameters(), self.disGB.parameters(), self.disGK.parameters()), lr=self.lr, betas=(0.5, 0.999))
 
     def train(self):
+        ''' Training loop of the model. '''
+
         self.genA2B.train(), self.genB2A.train(), self.disGA.train(), self.disGB.train(), self.disGK.train()
 
-        if self.resume_path:
-            self.load(self.resume_path)
+        # Load model and optionally apply a learning rate decay corresponding to the loaded iteration.
+        if self.resume:
+            assert self.load_path is not None, '--load_path argument must be set to a model weights path because the --resume flag is True.'
+            self.load(self.load_path)
             print(" [*] Load SUCCESS")
             if self.decay_flag and start_iter > (self.iteration // 2):
                 self.G_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2)) * (start_iter - self.iteration // 2)
                 self.D_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2)) * (start_iter - self.iteration // 2)
 
-        # training loop
+        ### Begin training loop.
         print('training start !')
         start_time = time.time()
 
@@ -123,6 +122,7 @@ class IHCScoreGAN(object):
                 self.G_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2))
                 self.D_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2))
 
+            # Since we have two DataLoaders with separate indices, we wrap them in unique iterators.
             try:
                 real_A, _ = next(trainA_iter)
             except:
@@ -137,50 +137,54 @@ class IHCScoreGAN(object):
 
             real_A, real_B, real_K = real_A.to(self.device), real_B.to(self.device), real_K.to(self.device)
 
+            ### Optional, experimental code to detect and apply the source image's RoI mask (i.e., whitespace) 
+            ### to the target image. Helps the model to learn how to ignore whitespace in the source image.
             # msk = real_A.sum(axis=1, keepdims=True)==3.0
             # real_B = torch.where(msk, -1, real_B)
             # real_K = torch.where(msk, -1, real_K)
             # G Forward
             
-            fake_B_dict = self.genA2B(real_A) # fake B
+            fake_B_dict = self.genA2B(real_A) # Fake B
             fake_B = fake_B_dict['output']
             fake_K = fake_B_dict['keypoints']
-            rec_A  = self.genB2A(fake_B) # cycle A
+            rec_A  = self.genB2A(fake_B) # Reconstructed A
 
-            fake_A = self.genB2A(real_B) # fake A
-            rec_B_dict  = self.genA2B(fake_A) # cycle B
+            fake_A = self.genB2A(real_B) # Fake A
+            rec_B_dict  = self.genA2B(fake_A) # Reconstructed B
             rec_B  = rec_B_dict['output']
             rec_K  = rec_B_dict['keypoints']
 
-            # Update G
+            ### Begin the generator update step.
+
+            # Do not compute gradients for the discriminators in this step.
             for net in [self.disGA, self.disGB, self.disGK]:
                 for param in net.parameters():
                     param.requires_grad = False
 
             self.G_optim.zero_grad()
 
-            idt_A = self.genB2A(real_A) # identity
+            idt_A = self.genB2A(real_A) # Identity A
 
-            idt_B_dict = self.genA2B(real_B) # identity
+            idt_B_dict = self.genA2B(real_B) # Identity B
             idt_B = idt_B_dict['output']
             idt_K = idt_B_dict['keypoints']
 
-            G_identity_loss_A = self.L1_loss(idt_A, real_A) * self.identity_weight * 0.5 # G_B should be identity if real_A is fed: ||G_B(A) - A||
-            G_identity_loss_B = self.L1_loss(idt_B, real_B) * self.identity_weight * 0.5 # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            G_identity_loss_K = self.L1_loss(idt_K, real_K) * self.identity_weight * 0.5 # G_A should be identity if real_K is fed: ||G_K(B) - K||
+            G_identity_loss_A = self.L1_loss(idt_A, real_A) * self.identity_weight * 0.5 # ||G_B(A) - A||
+            G_identity_loss_B = self.L1_loss(idt_B, real_B) * self.identity_weight * 0.5 # ||G_A(B) - B||
+            G_identity_loss_K = self.L1_loss(idt_K, real_K) * self.identity_weight * 0.5 # ||G_K(B) - K||
 
             fake_GA_logit = self.disGA(fake_B)
-            G_ad_loss_GA  = self.MSE_loss(fake_GA_logit, torch.ones_like(fake_GA_logit).to(self.device)) * self.adv_weight # GAN loss D_A(G_A(A))
+            G_ad_loss_GA  = self.MSE_loss(fake_GA_logit, torch.ones_like(fake_GA_logit).to(self.device)) * self.adv_weight # D_A(G_A(A))
             
             fake_GB_logit = self.disGB(fake_A)
-            G_ad_loss_GB  = self.MSE_loss(fake_GB_logit, torch.ones_like(fake_GB_logit).to(self.device)) * self.adv_weight # GAN loss D_B(G_B(B))
+            G_ad_loss_GB  = self.MSE_loss(fake_GB_logit, torch.ones_like(fake_GB_logit).to(self.device)) * self.adv_weight # D_B(G_B(B))
 
             fake_GK_logit = self.disGK(fake_K)
             G_ad_loss_GK  = self.MSE_loss(fake_GK_logit, torch.ones_like(fake_GK_logit).to(self.device)) * self.adv_weight
 
-            G_recon_loss_A = self.L1_loss(rec_A, real_A) * self.cycle_weight # Forward cycle loss || G_B(G_A(A)) - A||
-            G_recon_loss_B = self.L1_loss(rec_B, real_B) * self.cycle_weight # Backward cycle loss || G_A(G_B(B)) - B||
-            G_recon_loss_K = self.L1_loss(rec_K, real_K) * self.cycle_weight
+            G_recon_loss_A = self.L1_loss(rec_A, real_A) * self.cycle_weight # ||G_B(G_A(A)) - A||
+            G_recon_loss_B = self.L1_loss(rec_B, real_B) * self.cycle_weight # ||G_A(G_B(B)) - B||
+            G_recon_loss_K = self.L1_loss(rec_K, real_K) * self.cycle_weight # ||G_A(G_K(B)) - K||
 
             Generator_loss =  G_ad_loss_GA + G_recon_loss_A + G_identity_loss_A \
                             + G_ad_loss_GB + G_recon_loss_B + G_identity_loss_B \
@@ -189,10 +193,13 @@ class IHCScoreGAN(object):
             Generator_loss.backward()
             self.G_optim.step()
 
-            # Update D
+            ### Begin the discriminator update step.
+
+            # Compute gradients for the discriminators in this step.
             for net in [self.disGA, self.disGB, self.disGK]:
                 for param in net.parameters():
                     param.requires_grad = True
+
             self.D_optim.zero_grad()
 
             real_GA_logit = self.disGA(real_B)
@@ -211,8 +218,13 @@ class IHCScoreGAN(object):
             Discriminator_loss.backward()
             self.D_optim.step()
 
+            ### Debugging the model optimization.
             print("[%5d/%5d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" % (step, self.iteration, time.time() - start_time, Discriminator_loss, Generator_loss), end='\r')
+            
+            # Consider incrementing step relative to the batch size.
             # step += self.batch_size
+
+            ### Model visualization checkpoint.
             if (step % self.print_freq) < self.batch_size and step != 0:
                 train_sample_num = 5
                 A2B = np.zeros((self.img_size * 8, 0, 3))
@@ -250,9 +262,12 @@ class IHCScoreGAN(object):
                     idt_B_dict = self.genA2B(real_B)
                     idt_B = idt_B_dict['output']
 
+                    # Extract predicted cell center points and perform a local maxima operation.
                     keypoints = denorm(fake_K[0,0].detach().cpu().numpy())
                     maxima = (keypoints == filters.maximum_filter(keypoints, self.neighborhood_size)) & (keypoints > self.kp_threshold)
                     coords = torch.stack(torch.meshgrid([torch.linspace(0, 255, 256), torch.linspace(0, 255, 256)], indexing='ij'), -1).to(torch.uint8)[maxima]
+
+                    # Perform an argmax operation over the predicted cell types at the location of each cell center point.
                     classes = tensor2numpy(fake_K[0,1:])[maxima].reshape(-1, 2).argmax(axis=1)
 
                     img = np.ascontiguousarray(tensor2numpy(denorm(real_A[0])))
@@ -285,52 +300,56 @@ class IHCScoreGAN(object):
                 cv2.imwrite(os.path.join(self.result_dir, self.exp_name, 'img', f'B2A_{step}.png'), B2A * 255.0)
                 self.genA2B.train(), self.genB2A.train(), self.disGA.train(), self.disGB.train(), self.disGK.train()
 
+            ### Model weights checkpoint.
             if step % self.save_freq == 0 and step == 40000:
                 self.save(os.path.join(self.result_dir, self.exp_name, 'model'), step)
 
-    def save(self, dir, step, fold=None):
+    def save(self, dir, step):
         '''
-        Input: 
-            self
+        Saves the model weights to a file, so they can be loaded later.
+
+        Args:
+            dir (string):   Path to the model weights directory.
+            step (string):  The step (iteration) at which the model weights were saved.
         '''
+
+        # Only the A2B generator is needed for typical inferencing.
         params = {}
         params['genA2B'] = self.genA2B.state_dict()
-        params['genB2A'] = self.genB2A.state_dict()
-        params['disGA'] = self.disGA.state_dict()
-        params['disGB'] = self.disGB.state_dict()
-        params['disGK'] = self.disGB.state_dict()
         os.makedirs(dir, exist_ok=True)
         torch.save(params, os.path.join(dir, '_'.join((self.model_name, str(step) + '.pt'))))
 
-    def load(self, dir, step=None):
-        if step is not None: params = torch.load(os.path.join(dir, '_'.join((self.model_name, str(step) + '.pt'))))
-        else: params = torch.load(dir)
+    def load(self, dir):
+        '''
+        Loads the model weights for inference or fine-tuning.
+
+        Args:
+            dir (string):   Path to the model weights directory.
+        '''
+                
+        params = torch.load(dir)
+
+        # Only the A2B generator is needed for typical inferencing.
         self.genA2B.load_state_dict(params['genA2B'])
-        # self.genB2A.load_state_dict(params['genB2A'])
-        # self.disGA.load_state_dict(params['disGA'])
-        # self.disGB.load_state_dict(params['disGB'])
-        # self.disGK.load_state_dict(params['disGK'])
 
     def test(self, quant_report=True):
+        ''' Testing loop of the model. '''
 
-
-        model_weights_list = glob(os.path.join(self.result_dir, self.exp_name, 'model', '*.pt'))
-        if not len(model_weights_list) == 0:
-            self.load(os.path.join(self.result_dir, self.exp_name, 'model'), self.load_iteration)
+        try:
+            self.load(self.load_path)
             print(" [*] Load SUCCESS")
-        else:
+        except:
             print(" [*] Load FAILURE")
             return
         
         if quant_report:
             log_dir = os.path.join(self.result_dir, self.exp_name, 'logs')
-            log_file = os.path.join(log_dir, '_'.join(('quantification', self.dataset, str(self.load_iteration))) + '.log')
-            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, Path(self.load_path).stem + '.log')
             with open(log_file, 'w') as fp:
                 fp.write('row,filepath,record_type,percent_positive_nuclei,3+_cells_%,2+_cells_%,1+_cells_%,0+_cells_%,3+_nuclei,2+_nuclei,1+_nuclei,0+_nuclei,total_nuclei,class\n')
         counts = {}
         
-        self.genA2B.eval()#, self.genB2A.eval()
+        self.genA2B.eval()
 
         pbar = tqdm(self.testA_loader, total=len(self.testA_loader))
         for (real_A, _, path_A) in pbar:
@@ -339,16 +358,13 @@ class IHCScoreGAN(object):
             pbar.set_description(sample_names[0])
 
             real_A = real_A.to(self.device)
-
-            # import torchvision
-            # real_A = torchvision.transforms.GaussianBlur(7, sigma=20)(real_A)
-
             fake_B_dict = self.genA2B(real_A)
             fake_B = fake_B_dict['output']
             fake_K = fake_B_dict['keypoints']
 
             counts, coords_list, types_list = quantify_keypoints(counts, fake_K, sample_names, return_coords=True, neighborhood_size=self.neighborhood_size, threshold=self.kp_threshold)
 
+            # NOTE: Be careful if you have lots of images to process - this code will duplicate your dataset.
             if self.save_images:
                 datas = [(np.ascontiguousarray(tensor2numpy(denorm(img))), np.ascontiguousarray(tensor2numpy(denorm(kp)))) for img, kp in zip(real_A, fake_K)]
 
@@ -359,15 +375,18 @@ class IHCScoreGAN(object):
                         coord = np.array([coord[1], coord[0]])
                         img = cv2.circle(img, coord, 6, [1, 0, 0] if type==0 else [0, 0, 1], thickness=-1)
 
-                    path_dir = os.path.join(self.result_dir, self.exp_name, '_'.join(('test', self.dataset, self.load_iteration)))
+                    path_dir = os.path.join(self.result_dir, self.exp_name, '_'.join(('test', Path(self.load_path).stem)))
                     os.makedirs(path_dir, exist_ok=True)
                     cv2.imwrite(os.path.join(path_dir, stem + '.png'), RGB2BGR(img) * 255.0)
 
-                    path_dir = os.path.join(self.result_dir, self.exp_name, '_'.join(('test_cp', self.dataset, self.load_iteration + self.fold_str)))
-                    os.makedirs(path_dir, exist_ok=True)
-                    cv2.imwrite(os.path.join(path_dir, stem + '.png'), RGB2BGR(kp) * 255.0)
+                    # NOTE: Uncomment this block to save the center point predictions.
+                    #       We can optionally stitch together center point predictions before running the
+                    #       local maxima algorithm in order to resolve most double-counting issues at tile borders.
+                    # path_dir = os.path.join(self.result_dir, self.exp_name, '_'.join(('test_cp', self.dataset, self.load_iteration + self.fold_str)))
+                    # os.makedirs(path_dir, exist_ok=True)
+                    # cv2.imwrite(os.path.join(path_dir, stem + '.png'), RGB2BGR(kp) * 255.0)
 
-
+        # Example of saving out quantification results to a log file.
         if quant_report:
             with open(log_file, 'a') as fp:
                 for sample_name in tqdm(counts.keys()):
@@ -392,6 +411,25 @@ class IHCScoreGAN(object):
                     fp.write(','.join([str(v) for v in record.values()]) + '\n')
 
 def quantify_keypoints(counts, K, sample_names, neighborhood_size=30, threshold=0.8, return_coords=False):
+    '''
+    Quantifies the cells in K using a local maxima algorithm on the predicted cell center points, 
+    followed by an argmax algorithm over the predicted cell types.
+
+    Args:
+        counts (dict):           A dictionary representing the total recorded counts per sample.
+        K (tensor):              The predicted cell center points and cell types, output by the model's secondary branch.
+        sample_names (list):     A list of the sample names corresponding to each sample, so that sample counts can be aggregated.
+        neighborhood_size (int): The neighborhood size (in pixels) for the local maxima algorithm.
+        threshold (float):       A local maxima prediction must fall above this value to be considered a valid center point.
+        return_coords (bool):    Whether to return the coordinates of the detected center points. 
+                                 For example, simple quantification does not need this, but visualization does.
+
+    Returns:
+        counts (dict):           A dictionary of the updated total recorded counts per sample.
+        coords (list):           A 2D list containing center point coordinates of each cell.
+        classes_list (list):     A list containing the predicted cell types of each cell.
+    '''
+
     type2label = {0:'positive', 1:'negative'}
 
     for sample_name in sample_names: 

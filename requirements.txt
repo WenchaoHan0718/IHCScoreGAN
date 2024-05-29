@@ -1,13 +1,5 @@
-openslide-python
 opencv-python
 matplotlib
 pillow
-pandas
 scipy
-scikit-image
-xlrd
-docopt
-psutil
 tqdm
-imgaug
-termcolor

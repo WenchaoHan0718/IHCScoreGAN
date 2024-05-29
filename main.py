@@ -1,14 +1,20 @@
 from IHCScoreGAN import IHCScoreGAN
 import argparse, os
 
-def str2bool(x): return x.lower() in ('true')
+from utils import str2bool
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
+    '''
+    Parses command-line arguments.
+
+    Returns:
+        argparse.Namespace: object consisting of parsed command-line args and values.
+    '''
+
     desc = "Pytorch implementation of IHCScoreGAN"
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--exp_name', type=str, default='bcdataset', help='The experiment name')
-    parser.add_argument('--phase', type=str, default='train', help='[train / test]')
-    parser.add_argument('--load_iteration', type=str, default='40000', help='The iteration of weights file to load')
+    parser.add_argument('--phase', type=str, default='test', help='[train / test]')
 
     parser.add_argument('--iteration', type=int, default=40000, help='The number of training iterations')
     parser.add_argument('--batch_size', type=int, default=4, help='The batch size')
@@ -31,9 +37,9 @@ def parse_args():
     parser.add_argument('--img_size', type=int, default=256, help='The image size')
     parser.add_argument('--img_ch', type=int, default=3, help='The number of image channels')
 
-    parser.add_argument('--result_dir', type=str, default=r'/results', help='Directory name to save the results')
-    parser.add_argument('--input_dir', type=str, default=r'/dataset', help='Directory name for input images (must contain "trainA", "trainB", "testA", and "testB" subdirectories)')
-    parser.add_argument('--resume_path', type=str, default=None, help='The path to model weights to resume training from')
+    parser.add_argument('--result_dir', type=str, default=r'./results', help='Directory name to save the results')
+    parser.add_argument('--input_dir', type=str, default=r'./dataset', help='Directory name for input images (must contain "trainA", "trainB", "testA", and "testB" subdirectories)')
+    parser.add_argument('--load_path', type=str, default=r'', help='The path to model weights to load from')
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'], help='Set gpu mode [cpu, cuda]')
     parser.add_argument('--resume', type=str2bool, default=False)
 
@@ -44,11 +50,18 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    '''
+    Model entry point for train and test loop.
+    '''
+    
     args = parse_args()
-    assert args.batch_size >= 1, 'batch size must be larger than or equal to one'
+    assert args.batch_size >= 1, 'Batch size must be at least one'
 
+    # Ensure results paths exist
     os.makedirs(os.path.join(args.result_dir, args.exp_name, 'model'), exist_ok=True)
     os.makedirs(os.path.join(args.result_dir, args.exp_name, 'img'), exist_ok=True)
+    os.makedirs(os.path.join(args.result_dir, args.exp_name, 'logs'), exist_ok=True)
+
     gan = IHCScoreGAN(args)
     gan.build_model()
 
