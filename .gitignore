@@ -1,3 +1,5 @@
-dataset/*
-results/*
+dataset/trainA/*.png
+dataset/testA/*.png
+dataset/trainB/json/*.json
+dataset/trainB/overlay/*.png
 __pycache__
