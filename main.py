@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--img_ch', type=int, default=3, help='The number of image channels')
 
     parser.add_argument('--result_dir', type=str, default=r'./results', help='Directory name to save the results')
-    parser.add_argument('--input_dir', type=str, default=r'./dataset', help='Directory name for input images (must contain "trainA", "trainB", "testA", and "testB" subdirectories)')
+    parser.add_argument('--input_dir', type=str, default=r'./dataset', help='Directory name for input images (populate "trainA", "trainB", and "testA" subdirectories)')
     parser.add_argument('--load_path', type=str, default=r'./path-to-model-weights', help='The path to model weights to load from')
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'], help='Set gpu mode [cpu, cuda]')
     parser.add_argument('--resume', type=str2bool, default=False)
