@@ -6,3 +6,6 @@ dataset/trainB/json/*.json
 dataset/trainB/overlay/*.png
 
 results/bcdataset/img/*
+results/bcdataset/*/*.png
+results/bcdataset/*/*.log
+results/bcdataset/*/*.pt
