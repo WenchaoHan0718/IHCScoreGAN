@@ -17,6 +17,7 @@ class IHCScoreGAN(object):
         self.model_name = 'IHCScoreGAN'
         self.exp_name = args.exp_name
         self.phase = args.phase
+        self.resume = args.resume
 
         self.result_dir = Path(args.result_dir)
         self.input_dir = Path(args.input_dir)

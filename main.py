@@ -14,7 +14,7 @@ def parse_args() -> argparse.Namespace:
     desc = "Pytorch implementation of IHCScoreGAN"
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--exp_name', type=str, default='bcdataset', help='The experiment name')
-    parser.add_argument('--phase', type=str, default='test', help='[train / test]')
+    parser.add_argument('--phase', type=str, default='train', help='[train / test]')
 
     parser.add_argument('--iteration', type=int, default=40000, help='The number of training iterations')
     parser.add_argument('--batch_size', type=int, default=4, help='The batch size')
@@ -55,7 +55,7 @@ def main():
     '''
     
     args = parse_args()
-    assert args.batch_size >= 1, 'Batch size must be at least one'
+    assert args.batch_size >= 1, '--batch_size must be at least one'
 
     # Ensure results paths exist
     os.makedirs(os.path.join(args.result_dir, args.exp_name, 'model'), exist_ok=True)
@@ -65,11 +65,15 @@ def main():
     gan = IHCScoreGAN(args)
     gan.build_model()
 
-    if args.phase == 'train' :
+    if args.phase == 'train':
+        assert not (args.resume & (args.load_path is None)), 'Must set --load_path to a model weights file, since --phase is set to "train" and --resume flag is True'
+        
         gan.train()
         print(" [*] Training finished!")
 
-    if args.phase == 'test' :
+    if args.phase == 'test':
+        assert not args.load_path is None, 'Must set --load_path to a model weights file, since --phase is set to "test"'
+
         gan.test()
         print(" [*] Test finished!")
 
