@@ -22,11 +22,14 @@ class IHCScoreGAN(object):
         self.result_dir = Path(args.result_dir)
         self.input_dir = Path(args.input_dir)
         self.load_path = args.load_path
-        self.trainA_dir = self.input_dir / 'trainA'
-        self.trainB_dir = self.input_dir / 'trainB'
-        self.testA_dir = self.input_dir / 'testA'
-        assert all([query in os.listdir(self.input_dir) for query in ['trainA', 'testA', 'trainB']]), \
-            'Input directory must contain the following directories with necessary images: "trainA", "trainB", and "testA".'
+
+        if self.phase=='train':
+            self.trainA_dir = self.input_dir / 'trainA'
+            self.trainB_dir = self.input_dir / 'trainB'
+            assert os.path.exists(self.trainA_dir) & os.path.exists(self.trainB_dir), 'Since --phase is assigned "train", the --input_dir directory must contain the following subdirectories with necessary images: "trainA", "trainB"'
+        elif self.phase=='test':
+            self.testA_dir = self.input_dir / 'testA'
+            assert os.path.exists(self.testA_dir), 'Since --phase is assigned "test", the --input_dir directory must contain the following subdirectories with necessary images: "testA"'
 
         self.iteration = args.iteration
 
