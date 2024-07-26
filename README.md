@@ -14,7 +14,7 @@ This codebase is an official implementation of the relevant work, which was acce
 
 To train the model, you must populate the `trainA` and `trainB` folders with source (IHC) and target (synthetic) datasets. 
 
-The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles. The internal dataset experiments' data files have not been made publicly available.
+The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles.
 
 The `trainB` data used in our publication is publicly available at https://zenodo.org/records/11396999 with the files located under the `Training_Target_Dataset` directory. As mentioned in the associated publication, this target dataset has been extracted from TCGA's Breast Carcinoma project, consisting of 23 H&E slides.
 
@@ -53,7 +53,7 @@ To test the model, you must populate the `testA` folder with source (IHC) datase
 
 The model weights used in our publication's external dataset experiments are publicly available at https://zenodo.org/records/11396999 with the file named `IHCScoreGAN_Weights_BCData_Latest.pt`.
 
-The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles. The internal dataset experiments' data files have not been made publicly available.
+The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles.
 
 Your folder structure should look like:
 
@@ -87,7 +87,7 @@ python main.py --exp_name bcdataset --phase test --num_workers 8 --batch_size 4 
 <details>
   <summary>Supplementary Information</summary>
 
-We performed two two-split experiment on our internal dataset to reflect the performance for the model in a general use-case. In both experiments, we drew 1,532 cases in the train split and 594 cases in the test split, with tiles corresponding to the cases aggregated into their split. We then evaluated against the real clinical diagnosis of the patient, with cases thresholded at a commonly accepted 20% cutoff point.
+We performed two two-split experiments on our internal dataset to reflect the performance for the model in a general use-case. In both experiments, we drew 1,532 cases in the train split and 594 cases in the test split, with tiles corresponding to the cases aggregated into their split. We then evaluated against the real clinical diagnosis of the patient, with cases thresholded at a commonly accepted 20% cutoff point.
 </details>
 
 <p align="center"><img src="images/InternalExperimentRandom.png" height="200" width="auto"></p>
