@@ -16,7 +16,7 @@ To train the model, you must populate the `trainA` and `trainB` folders with sou
 
 The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles.
 
-The `trainB` data used in our publication is publicly available at https://zenodo.org/records/11396999 with the files located under the `Training_Target_Dataset` directory. As mentioned in the associated publication, this target dataset has been extracted from TCGA's Breast Carcinoma project, consisting of 23 H&E slides.
+The `trainB` data used in our publication is publicly available at https://zenodo.org/records/11396999 with the files located under the `Training_Target_Dataset` directory. This target dataset has been extracted from TCGA's Breast Carcinoma project, consisting of 23 H&E slides. Please see the associated publication for more information.
 
 Before training, your folder structure should look like:
 
