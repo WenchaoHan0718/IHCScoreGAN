@@ -49,6 +49,8 @@ python main.py --exp_name bcdataset --phase train --num_workers 8 --batch_size 4
 
 To test the model, you must populate the `testA` folder with source (IHC) datasets. 
 
+The model weights used in our publication's external dataset experiments are publicly available at https://zenodo.org/records/11396999 with the file named `IHCScoreGAN_Weights_BCData_Latest.pt`.
+
 The `trainA` data used in our publication's external dataset experiments can be obtained by downloading the [BCData dataset](https://sites.google.com/view/bcdataset) and splitting the resulting input images into 256x256 tiles. The internal dataset experiments' data files have not been made publicly available.
 
 Your folder structure should look like:
