@@ -8,6 +8,8 @@
 
 This codebase is an official implementation of the relevant work, which was accepted for publication in MIDL 2024. You can find the associated paper at https://openreview.net/pdf?id=U3vfFn9WQ7.
 
+[![Github All Releases](https://img.shields.io/github/downloads/WenchaoHan0718/IHCScoreGAN/total.svg)]()
+
 ## Usage
 
 ### Training
@@ -103,6 +105,7 @@ We validated our framework on a public breast cancer dataset, [BCData](https://s
 
 <p align="center"><img src="images/ExternalExperiment.png" height="225" width="auto"></p>
 
+
 ## Reference
 If you find our work useful in your research, and/or if you use parts of this code or its corresponding public files, please cite the paper as follows:
 
@@ -113,3 +116,16 @@ If you find our work useful in your research, and/or if you use parts of this co
   booktitle={Medical Imaging with Deep Learning}
 }
 ```
+
+## License
+
+Shield: [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
+
+This work is licensed under a
+[Creative Commons Attribution-NonCommercial 4.0 International License][cc-by-nc].
+
+[![CC BY-NC 4.0][cc-by-nc-image]][cc-by-nc]
+
+[cc-by-nc]: https://creativecommons.org/licenses/by-nc/4.0/
+[cc-by-nc-image]: https://licensebuttons.net/l/by-nc/4.0/88x31.png
+[cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg
