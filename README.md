@@ -8,7 +8,7 @@
 
 This codebase is an official implementation of the relevant work, which was accepted for publication in MIDL 2024. You can find the associated paper at https://openreview.net/pdf?id=U3vfFn9WQ7.
 
-[![Github All Releases](https://img.shields.io/github/downloads/WenchaoHan0718/IHCScoreGAN/total.svg)]()
+[![Github All Releases](https://img.shields.io/github/downloads/WenchaoHan0718/IHCScoreGAN/total)]()
 
 ## Usage
 
